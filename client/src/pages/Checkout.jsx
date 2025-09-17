@@ -2,27 +2,10 @@ import { useEffect, useState } from 'react'
 import { useCart } from '../context/CartContext.jsx'
 import AddressForm from '../components/AddressForm.jsx'
 import { createOrder } from '../services/payment.js'
-const CF_MODE = (import.meta.env.VITE_CASHFREE_ENV || 'sandbox').toLowerCase(); // 'sandbox' or 'production'
 
-async function payNow(total, customer, cart) {
-  // 1) Create order on your server
-  const { payment_session_id, order_id } = await createOrder({
-    amount: total,
-    customer, cart
-  });
+// use env (set this on Vercel): VITE_CASHFREE_ENV=sandbox
+const CF_MODE = (import.meta.env.VITE_CASHFREE_ENV || 'sandbox').toLowerCase(); // 'sandbox' | 'production'
 
-  if (!payment_session_id) {
-    alert('Failed to create Cashfree order');
-    return;
-  }
-
-  // 2) Start Cashfree checkout using JS SDK (do NOT open Cashfree URL directly)
-  const cashfree = new window.Cashfree({ mode: CF_MODE }); // <-- uses sandbox in Vercel now
-  cashfree.checkout({
-    paymentSessionId: payment_session_id,
-    redirectTarget: "_self"     // returns to /success?order_id={order_id}
-  });
-}
 export default function Checkout(){
   const { items, total } = useCart()
   const [addr, setAddr] = useState({})
@@ -41,9 +24,14 @@ export default function Checkout(){
   const handlePay = async () => {
     if (items.length === 0) return alert('Cart empty')
     if (!addr?.phone || String(addr.phone).length < 10) return alert('Enter a valid phone')
+
     setLoading(true)
     try {
-      const { payment_session_id } = await createOrder({
+      // --- DEBUG: confirm which backend the client is calling
+      console.log('VITE_API_BASE =', import.meta.env.VITE_API_BASE)
+
+      // Create order on server
+      const payload = {
         amount: toPay,
         customer: {
           id: addr.phone,
@@ -52,15 +40,30 @@ export default function Checkout(){
           phone: addr.phone
         },
         cart: items.map(i => ({ id:i.id, name:i.name, price:i.price, qty:i.qty }))
-      })
+      }
 
-      
-      const cashfree = window.Cashfree?.({ mode: import.meta.env.PROD ? 'production':'sandbox' })
-      if (!cashfree) return alert('Cashfree SDK not loaded')
-      await cashfree.checkout({ paymentSessionId: payment_session_id, redirectTarget: '_self' })
+      const res = await createOrder(payload)
+      console.log('create-order response:', res)
+
+      const { payment_session_id, order_id, error, detail } = res || {}
+      if (!payment_session_id) {
+        console.error('No payment_session_id:', res)
+        alert(error || detail || 'Failed to create Cashfree order')
+        return
+      }
+
+      // Start Cashfree checkout via JS SDK
+      if (!window.Cashfree) {
+        alert('Cashfree SDK not loaded'); return
+      }
+      const cashfree = new window.Cashfree({ mode: CF_MODE })
+      await cashfree.checkout({
+        paymentSessionId: payment_session_id,
+        redirectTarget: '_self'  // returns to /success?order_id=...
+      })
     } catch (e){
-      console.error(e)
-      alert(e?.response?.data?.error || 'Failed to start payment')
+      console.error('handlePay error:', e?.response?.data || e.message)
+      alert(e?.response?.data?.error || e.message || 'Failed to start payment')
     } finally {
       setLoading(false)
     }
@@ -108,4 +111,3 @@ export default function Checkout(){
     </div>
   )
 }
-
