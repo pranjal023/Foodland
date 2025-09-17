@@ -2,7 +2,27 @@ import { useEffect, useState } from 'react'
 import { useCart } from '../context/CartContext.jsx'
 import AddressForm from '../components/AddressForm.jsx'
 import { createOrder } from '../services/payment.js'
+const CF_MODE = (import.meta.env.VITE_CASHFREE_ENV || 'sandbox').toLowerCase(); // 'sandbox' or 'production'
 
+async function payNow(total, customer, cart) {
+  // 1) Create order on your server
+  const { payment_session_id, order_id } = await createOrder({
+    amount: total,
+    customer, cart
+  });
+
+  if (!payment_session_id) {
+    alert('Failed to create Cashfree order');
+    return;
+  }
+
+  // 2) Start Cashfree checkout using JS SDK (do NOT open Cashfree URL directly)
+  const cashfree = new window.Cashfree({ mode: CF_MODE }); // <-- uses sandbox in Vercel now
+  cashfree.checkout({
+    paymentSessionId: payment_session_id,
+    redirectTarget: "_self"     // returns to /success?order_id={order_id}
+  });
+}
 export default function Checkout(){
   const { items, total } = useCart()
   const [addr, setAddr] = useState({})
@@ -88,3 +108,4 @@ export default function Checkout(){
     </div>
   )
 }
+
