@@ -7,26 +7,20 @@ import { customAlphabet } from 'nanoid';
 const app = express();
 app.use(express.json());
 
-// --- CORS: allow comma-separated CLIENT_URL origins (or allow all if not set) ---
-const allowedOrigins = (process.env.CLIENT_URL || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
+// --- CORS Setup ---
+// CLIENT_URL can be comma-separated (http://localhost:5173,https://foodland.vercel.app)
+const allowedOrigins = (process.env.CLIENT_URL || '').split(',').map(s => s.trim()).filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, cb) => {
-      // allow same-origin / curl / Postman (no origin)
-      if (!origin) return cb(null, true);
-      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
-        return cb(null, true);
-      }
-      return cb(new Error('Not allowed by CORS'));
+      if (!origin) return cb(null, true); // allow tools like Postman
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error(`CORS blocked: ${origin}`));
     },
   })
 );
 
-// --- ENV ---
 const {
   CASHFREE_ENV = 'sandbox',
   CASHFREE_APP_ID,
@@ -34,10 +28,7 @@ const {
   API_VERSION = '2025-01-01',
 } = process.env;
 
-const nanoid = customAlphabet(
-  '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
-  24
-);
+const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 24);
 
 const CF_BASE =
   CASHFREE_ENV === 'production'
@@ -47,31 +38,17 @@ const CF_BASE =
 // --- Create Order ---
 app.post('/api/create-order', async (req, res) => {
   try {
-    const { amount, currency = 'INR', customer = {}, cart = [] } =
-      req.body || {};
-
-    if (CASHFREE_ENV === 'mock') {
-      const order_id = `order_${nanoid()}`;
-      return res.json({
-        order_id,
-        payment_session_id: `mock_session_${nanoid()}`,
-        mock: true,
-      });
-    }
+    const { amount, currency = 'INR', customer = {}, cart = [] } = req.body || {};
 
     if (!CASHFREE_APP_ID || !CASHFREE_SECRET) {
-      return res
-        .status(500)
-        .json({ error: 'Cashfree credentials not set in server/.env' });
-    }
-    if (!amount || Number(amount) <= 0) {
-      return res.status(400).json({ error: 'Invalid amount' });
+      return res.status(500).json({ error: 'Cashfree credentials missing' });
     }
 
     const order_id = `order_${nanoid()}`;
-    const return_url = `${
-      process.env.CLIENT_URL || 'http://localhost:5173'
-    }/success?order_id={order_id}`;
+
+    // Return URL: based on deployed client
+    const clientUrl = process.env.CLIENT_URL?.split(',')[0] || 'http://localhost:5173';
+    const return_url = `${clientUrl}/success?order_id={order_id}`;
 
     const payload = {
       order_id,
@@ -94,70 +71,22 @@ app.post('/api/create-order', async (req, res) => {
       'x-client-secret': CASHFREE_SECRET,
     };
 
-    const { data } = await axios.post(`${CF_BASE}/orders`, payload, {
-      headers,
-    });
-
-    if (!data?.payment_session_id) {
-      return res
-        .status(502)
-        .json({ error: 'No payment_session_id received', raw: data });
-    }
-
+    const { data } = await axios.post(`${CF_BASE}/orders`, payload, { headers });
     return res.json({
       order_id: data.order_id || order_id,
       payment_session_id: data.payment_session_id,
     });
   } catch (err) {
     console.error('Create order error:', err?.response?.data || err.message);
-    return res.status(500).json({
-      error: 'Failed to create Cashfree order',
-      detail: err?.response?.data || err.message,
-    });
+    return res.status(500).json({ error: 'Failed to create Cashfree order' });
   }
 });
 
-// --- Get Order Status ---
-app.get('/api/order-status', async (req, res) => {
-  try {
-    const { order_id } = req.query;
-    if (!order_id)
-      return res.status(400).json({ error: 'Missing order_id' });
-
-    if (CASHFREE_ENV === 'mock') {
-      return res.json({ order_id, order_status: 'PAID', mock: true });
-    }
-
-    if (!CASHFREE_APP_ID || !CASHFREE_SECRET) {
-      return res
-        .status(500)
-        .json({ error: 'Cashfree credentials not set in server/.env' });
-    }
-
-    const headers = {
-      'x-api-version': API_VERSION,
-      'x-client-id': CASHFREE_APP_ID,
-      'x-client-secret': CASHFREE_SECRET,
-    };
-
-    const { data } = await axios.get(`${CF_BASE}/orders/${order_id}`, {
-      headers,
-    });
-    return res.json(data);
-  } catch (err) {
-    console.error('Get order error:', err?.response?.data || err.message);
-    return res.status(500).json({
-      error: 'Failed to fetch order',
-      detail: err?.response?.data || err.message,
-    });
-  }
-});
-
-// Health
+// --- Health ---
 app.get('/', (_req, res) => res.json({ ok: true }));
 
-// --- PORT handling for local + cloud ---
+// --- Port ---
 const PORT = Number(process.env.PORT || process.env.SERVER_PORT || 5001);
 app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT} (env: ${CASHFREE_ENV})`);
+  console.log(` Server running on http://localhost:${PORT}`);
 });
