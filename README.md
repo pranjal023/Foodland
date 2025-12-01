@@ -1,11 +1,11 @@
-# 🍔 Food Ordering App (React + Cashfree) — TheMealDB 
+#  Food Ordering App (React + Cashfree) — TheMealDB 
 
 Swiggy/Zomato‑style frontend with cart, delivery address, order summary, and **Cashfree Checkout** payment.  
 Data comes from **TheMealDB** API, and prices are randomly generated **₹120–₹399**.
 
 - Frontend: React + Vite, plain CSS
 - Backend: Express + Axios (creates Cashfree order and verifies status)
-- Payment: Cashfree PG, using JS SDK v3 (Checkout)
+- Payment: Cashfree PG, using JS SDK v3 
 
 
 
