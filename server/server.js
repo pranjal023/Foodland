@@ -7,8 +7,8 @@ import { customAlphabet } from 'nanoid';
 const app = express();
 app.use(express.json());
 
-// --- CORS Setup ---
-// CLIENT_URL can be comma-separated (http://localhost:5173,https://foodland.vercel.app)
+// CORS Setup 
+
 const allowedOrigins = (process.env.CLIENT_URL || '').split(',').map(s => s.trim()).filter(Boolean);
 
 app.use(
@@ -35,7 +35,7 @@ const CF_BASE =
     ? 'https://api.cashfree.com/pg'
     : 'https://sandbox.cashfree.com/pg';
 
-// --- Create Order ---
+// Create Order 
 app.post('/api/create-order', async (req, res) => {
   try {
     const { amount, currency = 'INR', customer = {}, cart = [] } = req.body || {};
@@ -46,7 +46,7 @@ app.post('/api/create-order', async (req, res) => {
 
     const order_id = `order_${nanoid()}`;
 
-    // Return URL: based on deployed client
+    // Return url
     const clientUrl = process.env.CLIENT_URL?.split(',')[0] || 'http://localhost:5173';
     const return_url = `${clientUrl}/success?order_id={order_id}`;
 
@@ -82,7 +82,7 @@ app.post('/api/create-order', async (req, res) => {
   }
 });
 
-// --- Health ---
+// health 
 app.get('/', (_req, res) => res.json({ ok: true }));
 
 // --- Port ---
